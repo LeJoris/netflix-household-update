@@ -2,6 +2,7 @@ import imaplib
 import email
 import time
 import logging
+#import logging.handlers
 import configparser
 from selenium import webdriver
 from selenium.webdriver import Keys
@@ -50,6 +51,25 @@ class NetflixLocationUpdate:
         logging.basicConfig(filename='status.log', encoding='utf8', level=logging.INFO,
                             format='%(asctime)s %(levelname)-8s %(message)s',
                             datefmt='%Y-%m-%d %H:%M:%S')
+
+        #--------------------------------------------------------------------------------
+        # Logging config with max bytes and backup count
+        
+        # Set the maximum size of the log file to 10MB
+        #max_log_size = 10 * 1024 * 1024
+        
+        # Configure the RotatingFileHandler with the maximum log size and backup count
+        #file_handler = logging.handlers.RotatingFileHandler('status.log', maxBytes=max_log_size, backupCount=5,
+        #                                                    encoding='utf8', delay=False)
+        
+        #file_handler.setLevel(logging.INFO)
+        #file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+        
+        # Add the file handler to the root logger
+        #logging.getLogger().addHandler(file_handler)
+        #logging.getLogger().setLevel(logging.INFO)
+        #--------------------------------------------------------------------------------
+
         logging.info('---------------- Script started ----------------\n')
 
         self._driver = self.__init_webdriver(chromedriver_path)
@@ -59,8 +79,8 @@ class NetflixLocationUpdate:
         if self._move_to_mailbox:
             self._mail.create(self._move_to_mailbox_name)
 
-    def __del__(self):
-        self.close()
+    #def __del__(self):
+    #    self.close()  #may cause double closing when called manually and then when deleting instace, double closing creates error
 
     @staticmethod
     def __init_webdriver(chromedriver_path: str) -> webdriver.Chrome:
@@ -141,7 +161,7 @@ class NetflixLocationUpdate:
 
         # Iterate over the email IDs in reverse order (newest to oldest)
         for email_id in reversed(email_ids):
-            logging.info(f"Found Netflix Email, ID: {email_id}")
+            #logging.info(f"Found Netflix Email, ID: {email_id}")
 
             # Fetch the email data
             result, data = self._mail.fetch(email_id, '(RFC822)')
@@ -177,12 +197,13 @@ class NetflixLocationUpdate:
                 update_link = html_payload[idx_start:-1]
                 idx_end = update_link.find('"')
                 update_link = update_link[0:idx_end-1]
-                # URL ist encoded with quote printable. Bring back the equal sign in the link
+                # URL is encoded with quote printable. Bring back the equal sign in the link
                 update_link = update_link.replace('=3D', '=').replace('&amp;', '&').replace('=\n', '')
                 if update_link != '':
                     update_link = 'https://' + update_link
                     ret = self.__parse_html_for_button(update_link)
-                    logging.info(f"Parsed Netflix Email. Successful: {ret}, Link: {update_link}")
+                    if ret:
+                        logging.info(f"Parsed Netflix Email. ID: {email_id}, Successful: {ret}, Link: {update_link}")
 
             # Move Email into Netflix folder
             if self._move_to_mailbox:
@@ -206,16 +227,22 @@ class NetflixScheduler:
             try:
                 self._location_update.fetch_mails()
                 time.sleep(self._polling_time)
-            except KeyboardInterrupt:
-                logging.info("Break script by keyboard interrupt")
-                break
             except Exception as e:
                 logging.error(e)
-
-        self._location_update.close()
+                break
 
 
 if __name__ == '__main__':
-    netflix_updater = NetflixLocationUpdate(config_path='config.ini')
-    scheduler = NetflixScheduler(polling_time=2, location_update=netflix_updater)
-    scheduler.run()
+    while True:
+        try:
+            netflix_updater = NetflixLocationUpdate(config_path='config.ini')
+            scheduler = NetflixScheduler(polling_time=2, location_update=netflix_updater)
+            scheduler.run()
+        except KeyboardInterrupt:
+            logging.info("Break script by keyboard interrupt")
+            break
+        except Exception as e:
+            logging.error(e)
+            netflix_updater.close()
+            
+    netflix_updater.close()
