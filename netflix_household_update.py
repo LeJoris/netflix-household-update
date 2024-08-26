@@ -238,6 +238,7 @@ if __name__ == '__main__':
             netflix_updater = NetflixLocationUpdate(config_path='config.ini')
             scheduler = NetflixScheduler(polling_time=2, location_update=netflix_updater)
             scheduler.run()
+            netflix_updater.close()
         except KeyboardInterrupt:
             logging.info("Break script by keyboard interrupt")
             break
